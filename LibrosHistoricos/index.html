@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de la Tierra Santa, Antiguo Testamento</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23002147'/%3E%3Cpath d='M16 6a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z' fill='%23C9A227'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: Georgia, serif;
+            background: #001530;
+            color: #eee;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ── Header ── */
+        #header {
+            background: rgba(0, 21, 48, 0.97);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border-bottom: 1px solid #003060;
+            z-index: 20;
+            flex-shrink: 0;
+        }
+        #header h1 { font-size: 1.1rem; color: #C9A227; letter-spacing: 1px; }
+        #header .sub { font-size: 0.72rem; color: #777; margin-top: 2px; }
+
+        /* ── Filter bar (horizontal, top) ── */
+        #filter-bar {
+            background: rgba(0, 15, 38, 0.97);
+            border-bottom: 1px solid #002040;
+            padding: 5px 16px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            overflow-x: auto;
+            z-index: 20;
+        }
+        #filter-bar::-webkit-scrollbar { height: 3px; }
+        #filter-bar::-webkit-scrollbar-thumb { background: #003060; border-radius: 2px; }
+        #filter-bar .chip {
+            padding: 3px 11px;
+            font-size: 0.7rem;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid transparent;
+            opacity: 0.4;
+            transition: opacity 0.15s, transform 0.1s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        #filter-bar .chip:hover  { opacity: 0.75; }
+        #filter-bar .chip.active { opacity: 1; transform: scale(1.05); }
+        #filter-bar .chip-count  { font-size: 0.6rem; opacity: 0.75; margin-left: 2px; }
+        #filter-bar .divider     { width: 1px; height: 16px; background: #002040; flex-shrink: 0; }
+
+        /* ── Map wrap ── */
+        #map-wrap { flex: 1; position: relative; overflow: hidden; }
+        #map      { position: absolute; inset: 0; }
+
+        /* ── Vertex handles ── */
+        .vertex-handle {
+            width: 13px; height: 13px;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid #9b59b6;
+            cursor: grab;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+            transition: transform 0.1s;
+        }
+        .vertex-handle:hover  { transform: scale(1.3); }
+        .vertex-handle:active { cursor: grabbing; }
+        .vertex-handle-mid {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.45);
+            border: 2px solid #9b59b6;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.1s;
+        }
+        .vertex-handle-mid:hover { background: white; transform: scale(1.4); }
+
+        /* ── Vertex edit bar ── */
+        #vertex-bar {
+            display: none;
+            position: absolute;
+            bottom: 36px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10, 10, 25, 0.95);
+            border: 1px solid #9b59b6;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 0.78rem;
+            color: #ccc;
+            z-index: 20;
+            display: none;
+            align-items: center;
+            gap: 12px;
+            white-space: nowrap;
+        }
+        #vertex-bar span { color: #c39bd3; }
+
+        /* ── Drawing hint bar ── */
+        #drawing-hint {
+            display: none;
+            position: absolute;
+            bottom: 36px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10, 10, 25, 0.92);
+            border: 1px solid #9b59b6;
+            border-radius: 20px;
+            padding: 6px 18px;
+            font-size: 0.78rem;
+            color: #ccc;
+            z-index: 20;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #drawing-hint span { color: #9b59b6; font-weight: bold; }
+
+        /* ── Left panel ── */
+        #panel {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            width: 215px;
+            background: rgba(0, 21, 48, 0.93);
+            border: 1px solid #003060;
+            border-radius: 8px;
+            padding: 10px;
+            z-index: 10;
+            max-height: calc(100% - 20px);
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+        #panel h2 {
+            color: #C9A227;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #002040;
+            flex-shrink: 0;
+        }
+        .panel-section-title {
+            color: #888;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 8px 0 4px;
+            flex-shrink: 0;
+        }
+
+
+        /* ── Scrollable list area ── */
+        #panel-scroll {
+            overflow-y: auto;
+            flex: 1;
+        }
+        #panel-scroll::-webkit-scrollbar { width: 4px; }
+        #panel-scroll::-webkit-scrollbar-thumb { background: #003060; border-radius: 4px; }
+
+        .empty-msg {
+            color: #555;
+            font-size: 0.78rem;
+            text-align: center;
+            padding: 14px 8px;
+            line-height: 1.6;
+        }
+
+        /* ── Grupos colapsables ── */
+        details.type-group { margin-bottom: 2px; }
+        details.type-group summary.group-header {
+            list-style: none; display: flex; align-items: center; gap: 6px;
+            padding: 5px 7px; border-radius: 5px; cursor: pointer;
+            font-size: 0.72rem; font-weight: bold; color: #aaa;
+            background: #00112a; user-select: none;
+            transition: background 0.12s;
+        }
+        details.type-group summary.group-header:hover { background: #001f40; }
+        details.type-group summary.group-header::before {
+            content: '▶'; font-size: 0.6rem; color: #555;
+            transition: transform 0.15s; flex-shrink: 0;
+        }
+        details.type-group[open] summary.group-header::before { transform: rotate(90deg); }
+        details.type-group summary::-webkit-details-marker { display: none; }
+        .group-count { font-size: 0.65rem; color: #555; margin-left: auto; }
+
+        /* ── Tag items (puntos) ── */
+        .tag-item {
+            padding: 5px 7px;
+            margin-bottom: 3px;
+            border-radius: 5px;
+            background: #001a3a;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            transition: background 0.15s;
+        }
+        .tag-item:hover { background: #002040; }
+        .tag-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .tag-name { color: #ddd; font-size: 0.78rem; font-weight: bold; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tag-type { color: #666; font-size: 0.65rem; display: block; margin-top: 1px; }
+        .tag-del {
+            color: #444; font-size: 0.7rem; cursor: pointer;
+            padding: 2px 4px; border-radius: 3px; flex-shrink: 0;
+        }
+        .tag-del:hover { color: #e74c3c; background: rgba(231,76,60,0.12); }
+
+        /* ── Region items ── */
+        .region-item {
+            padding: 5px 7px;
+            margin-bottom: 3px;
+            border-radius: 5px;
+            background: #001a3a;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            transition: background 0.15s;
+        }
+        .region-item:hover { background: #002040; }
+        .region-swatch {
+            width: 14px; height: 10px;
+            border-radius: 2px;
+            flex-shrink: 0;
+            opacity: 0.8;
+        }
+
+        /* ── Right controls ── */
+        .controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 10;
+        }
+        .btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn-add {
+            background: #C9A227;
+            color: #001530;
+            box-shadow: 0 2px 8px rgba(212,168,85,0.3);
+        }
+        .btn-add:hover { background: #d4b535; }
+        .btn-add.active {
+            background: #e74c3c;
+            color: white;
+            box-shadow: 0 2px 8px rgba(231,76,60,0.3);
+        }
+        .btn-region {
+            background: rgba(155,89,182,0.18);
+            color: #c39bd3;
+            border: 1px solid #9b59b6;
+        }
+        .btn-region:hover { background: rgba(155,89,182,0.3); }
+        .btn-region.active {
+            background: #9b59b6;
+            color: white;
+            box-shadow: 0 2px 8px rgba(155,89,182,0.4);
+        }
+        .btn-sec {
+            background: rgba(0, 21, 50, 0.9);
+            color: #bbb;
+            border: 1px solid #003060;
+        }
+        .btn-sec:hover { background: rgba(40, 40, 65, 0.95); color: #eee; }
+
+        /* ── Cursors ── */
+        .cursor-add canvas  { cursor: crosshair !important; }
+        .cursor-draw canvas { cursor: crosshair !important; }
+        .cursor-pan canvas  { cursor: grab !important; }
+        .cursor-pan canvas:active { cursor: grabbing !important; }
+
+        /* ── Point marker ── */
+        .marker-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+        }
+        .marker-label {
+            background: rgba(8, 8, 20, 0.82);
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 0.68rem;
+            font-weight: bold;
+            white-space: nowrap;
+            border: 1px solid;
+            font-family: Georgia, serif;
+            backdrop-filter: blur(3px);
+            transition: transform 0.15s, box-shadow 0.15s;
+            max-width: 130px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            user-select: none;
+        }
+        .marker-wrapper:hover .marker-label {
+            transform: scale(1.08);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        .marker-line { width: 1.5px; height: 16px; }
+        .marker-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255,255,255,0.85);
+            box-shadow: 0 1px 5px rgba(0,0,0,0.6);
+            flex-shrink: 0;
+        }
+
+        /* ── Region label (centroid) ── */
+        .region-label-wrap { cursor: pointer; }
+        .region-label {
+            background: rgba(0, 12, 30, 0.78);
+            padding: 3px 9px;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: bold;
+            border: 1px solid;
+            font-family: Georgia, serif;
+            backdrop-filter: blur(3px);
+            user-select: none;
+            white-space: nowrap;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .region-label-wrap:hover .region-label {
+            transform: scale(1.06);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        /* ── Créditos ── */
+        #credits {
+            position: absolute; bottom: 28px; right: 8px; z-index: 10;
+            font-size: 0.6rem; color: rgba(255,255,255,0.45);
+            background: rgba(0,0,0,0.35); padding: 3px 8px; border-radius: 4px;
+            pointer-events: none; user-select: none; letter-spacing: 0.02em;
+        }
+
+        /* ── Off-screen indicators ── */
+        #offscreen-container {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 6;
+            overflow: hidden;
+        }
+        .os-ind {
+            position: absolute;
+            pointer-events: all;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            padding: 3px 7px 3px 5px;
+            border-radius: 10px;
+            font-size: 0.62rem;
+            font-weight: bold;
+            font-family: Georgia, serif;
+            color: #fff;
+            white-space: nowrap;
+            transform: translate(-50%, -50%);
+            opacity: 0.85;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.55);
+            transition: opacity 0.15s;
+            max-width: 130px;
+        }
+        .os-ind:hover { opacity: 1; }
+        .os-ind-icon { font-size: 9px !important; line-height: 1; flex-shrink: 0; }
+        .os-ind-name { overflow: hidden; text-overflow: ellipsis; }
+        .os-ind-arr  { font-size: 8px; flex-shrink: 0; }
+
+        /* ── Pattern buttons (form) ── */
+        .pattern-btn {
+            padding: 4px 7px;
+            background: #001530;
+            color: #999;
+            border: 1px solid #003060;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            transition: all 0.15s;
+        }
+        .pattern-btn:hover { background: #002040; color: #eee; }
+        .pattern-btn.pat-selected { background: #002858; color: #eee; border-color: #9b59b6; }
+
+        /* ── Tag / Region form popup ── */
+        .tag-form {
+            background: #000f22;
+            border: 1px solid #C9A227;
+            border-radius: 8px;
+            padding: 12px;
+            min-width: 230px;
+        }
+        .tag-form.region-form { border-color: #9b59b6; }
+        .tag-form h3 { color: #C9A227; font-size: 0.88rem; margin-bottom: 10px; }
+        .region-form h3 { color: #c39bd3; }
+        .tag-form input,
+        .tag-form select,
+        .tag-form textarea {
+            width: 100%;
+            padding: 6px 8px;
+            margin-bottom: 7px;
+            background: #001530;
+            border: 1px solid #003060;
+            border-radius: 4px;
+            color: #eee;
+            font-size: 0.82rem;
+            font-family: Georgia, serif;
+            outline: none;
+        }
+        .tag-form input:focus,
+        .tag-form select:focus,
+        .tag-form textarea:focus { border-color: #C9A227; }
+        .region-form input:focus,
+        .region-form select:focus { border-color: #9b59b6; }
+        .tag-form select option { background: #001530; }
+        .tag-form textarea { resize: vertical; min-height: 48px; }
+        .btn-row { display: flex; gap: 6px; margin-top: 2px; }
+        .btn-save {
+            flex: 1; padding: 7px;
+            background: #C9A227; color: #001530;
+            border: none; border-radius: 5px;
+            cursor: pointer; font-weight: bold; font-size: 0.82rem;
+        }
+        .btn-save:hover { background: #d4b535; }
+        .btn-save-region { background: #9b59b6; color: white; }
+        .btn-save-region:hover { background: #a66bbe; }
+
+        /* ── Color palette ── */
+        .color-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 7px;
+        }
+        .color-swatch {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.15s, border-color 0.15s;
+        }
+        .color-swatch:hover { transform: scale(1.2); }
+        .color-swatch.selected { border-color: white; transform: scale(1.15); }
+        .color-preview-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 7px;
+            font-size: 0.75rem;
+            color: #999;
+        }
+        .color-preview-dot {
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255,255,255,0.4);
+            flex-shrink: 0;
+        }
+        .btn-cancel {
+            padding: 7px 12px;
+            background: #002040; color: #aaa;
+            border: 1px solid #003060; border-radius: 5px;
+            cursor: pointer; font-size: 0.82rem;
+        }
+        .btn-cancel:hover { background: #002858; }
+
+        /* ── Popup info ── */
+        .pop-wrap { padding: 2px; min-width: 160px; }
+        .pop-name { color: #C9A227; font-weight: bold; font-size: 0.95rem; margin-bottom: 2px; }
+        .pop-modern { color: #999; font-size: 0.75rem; margin-bottom: 2px; }
+        .pop-type {
+            display: inline-block;
+            background: #001530; color: #aaa;
+            font-size: 0.7rem; padding: 1px 6px;
+            border-radius: 10px; border: 1px solid #003060;
+            margin-bottom: 5px;
+        }
+        .pop-note { color: #bbb; font-size: 0.78rem; line-height: 1.4; margin-top: 4px; border-top: 1px solid #002040; padding-top: 5px; }
+
+        /* MapLibre popup override */
+        .maplibregl-popup-content {
+            background: #000f22 !important;
+            border: 1px solid #003060 !important;
+            border-radius: 8px !important;
+            padding: 10px 12px !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6) !important;
+            color: #eee !important;
+        }
+        .maplibregl-popup-tip { border-top-color: #003060 !important; border-bottom-color: #003060 !important; }
+        .maplibregl-popup-close-button { color: #888 !important; font-size: 1rem !important; }
+        .maplibregl-popup-close-button:hover { color: #eee !important; background: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <div>
+        <h1>Mapa de la Tierra Santa &mdash; Antiguo Testamento</h1>
+        <div class="sub">Desarrollado por Marco &mdash; Pentateuco y Libros Históricos</div>
+    </div>
+</div>
+
+<div id="filter-bar"></div>
+
+<div id="map-wrap">
+<div id="map"></div>
+<div id="offscreen-container"></div>
+
+<!-- Vertex edit bar -->
+<div id="vertex-bar">
+    <span>Arrastra los puntos</span> para editar la forma &nbsp;·&nbsp;
+    <button class="btn-save btn-save-region" style="padding:3px 12px;font-size:0.75rem" onclick="saveVertexEdit()">Guardar</button>
+    <button class="btn-cancel" style="padding:3px 10px;font-size:0.75rem" onclick="cancelVertexEdit()">Cancelar</button>
+</div>
+
+<!-- Hint bar while drawing a polygon -->
+<div id="drawing-hint">
+    <span id="hint-pts">0</span> puntos &nbsp;·&nbsp;
+    Click para agregar &nbsp;·&nbsp;
+    <span>Doble-click</span> para cerrar &nbsp;·&nbsp;
+    <span id="hint-pan-btn" onclick="togglePanMode()" style="cursor:pointer;text-decoration:underline;pointer-events:auto" title="O mantén Espacio">✋ Mover mapa</span> &nbsp;·&nbsp;
+    <span>ESC</span> para cancelar
+</div>
+
+<div id="panel">
+    <h2>Tierra Santa <span id="total-count" style="color:#888;font-weight:normal;font-size:0.75rem">0</span></h2>
+    <div id="panel-scroll">
+        <div id="tag-list"></div>
+        <div id="region-section" style="display:none">
+            <div id="region-list"></div>
+        </div>
+    </div>
+</div>
+
+<div class="controls">
+    <button class="btn btn-sec btn-vista" onclick="toggleStyle()" title="Cicla entre Satélite → Topográfico → Terreno">🗻 Topográfico</button>
+    <button class="btn btn-sec" onclick="togglePitch()" title="Alternar 3D / 2D">&#9968; 3D / 2D</button>
+</div>
+
+</div><!-- /map-wrap -->
+
+<script>
+const MAPTILER_KEY = 'Fsn4KoqZ2I41gMqHGAND';
+
+// ── Categorías ──
+const COLORS = {
+    ciudad:     '#e74c3c',
+    cordillera: '#8B5E3C',
+    monte:      '#27ae60',
+    planicie:   '#e8a020',
+    region:     '#9b59b6',
+    agua:       '#1a8fc1',
+    pueblo:     '#3498db',
+    otro:       '#C9A227'
+};
+const TYPE_LABELS = {
+    ciudad:     'Ciudad',
+    cordillera: 'Cadena Montañosa',
+    monte:      'Monte / Montaña',
+    planicie:   'Planicie / Llanura',
+    region:     'Región',
+    agua:       'Cuerpo de Agua',
+    pueblo:     'Pueblo / Aldea',
+    otro:       'Otro'
+};
+const TYPE_ICONS = {
+    ciudad:     'location_city',
+    cordillera: 'terrain',
+    monte:      'filter_hdr',
+    planicie:   'grass',
+    region:     'map',
+    agua:       'water',
+    pueblo:     'home',
+    otro:       'place'
+};
+const PATTERNS = [
+    { key: 'solid', icon: '▓', label: 'Sólido'  },
+    { key: 'dash',  icon: '≡', label: 'Rayas'   },
+    { key: 'lines', icon: '⟋', label: 'Líneas'  },
+    { key: 'hatch', icon: '⊞', label: 'Cuadrícula' },
+    { key: 'dots',  icon: '⁚', label: 'Puntos'  },
+];
+
+// ── Estado puntos ──
+let addMode      = false;
+let tags         = [];
+let markers      = {};
+let activePopup  = null;
+let activeFilters = new Set(['__all__']); // '__all__' presente = mostrar todo; vacío = ocultar todo
+let lastClickTime = 0;
+
+// ── Estado regiones ──
+let drawingRegion  = false;
+let regionPoints   = [];
+let regions        = [];
+let regionMarkers  = {};
+let panMode        = false;
+let spaceHeld      = false;
+
+const REGION_PALETTE = [
+    '#9b59b6','#e74c3c','#27ae60','#1a8fc1','#e8a020',
+    '#8B5E3C','#C9A227','#16a085','#e91e8c','#2980b9',
+    '#ff6b35','#546e7a'
+];
+let pendingRegionColor = REGION_PALETTE[0];
+
+// ── Estado mapa ──
+let styleIndex  = 1;
+let roadsHidden = true;
+let is3D        = true;
+
+// ── Estilos ──
+const STYLES = [
+    { key: 'satellite', label: '🛰 Satélite',    url: `https://api.maptiler.com/maps/satellite/style.json?key=${MAPTILER_KEY}` },
+    { key: 'topo',      label: '🗻 Topográfico', url: `https://api.maptiler.com/maps/topo/style.json?key=${MAPTILER_KEY}` },
+    { key: 'outdoor',   label: '⛰ Terreno',     url: `https://api.maptiler.com/maps/outdoor/style.json?key=${MAPTILER_KEY}` },
+];
+
+// ── Mapa ──
+const map = new maplibregl.Map({
+    container: 'map',
+    style: STYLES[1].url,
+    center: [35.2137, 31.7683],
+    zoom: 9,
+    pitch: 52,
+    bearing: -12,
+    antialias: true,
+    maxBounds: [[28.0, 26.0], [49.0, 38.0]]
+});
+
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+
+// ── Teclado ──
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && drawingRegion) { cancelDrawing(); return; }
+    if (e.key === 'Escape' && addMode)       { toggleAddMode(); return; }
+    if (e.code === 'Space' && drawingRegion && !spaceHeld) {
+        e.preventDefault();
+        spaceHeld = true;
+        enterPanMode();
+    }
+});
+document.addEventListener('keyup', e => {
+    if (e.code === 'Space' && spaceHeld) {
+        spaceHeld = false;
+        if (!panMode) exitPanMode(); // solo salir si no está fijo en pan
+    }
+});
+
+map.on('load', () => {
+    addTerrainAndSky();
+    addRegionSources();
+    applyRoadVisibility();
+    hideMapLabels();
+    loadData();
+    map.on('move', scheduleOffscreen);
+    map.on('zoom', scheduleOffscreen);
+});
+
+// ── Eventos del mapa ──
+map.on('click', (e) => {
+    if (addMode) { showTagForm(e.lngLat); return; }
+    if (drawingRegion && !panMode && !spaceHeld) {
+        const now = Date.now();
+        if (now - lastClickTime < 400) { lastClickTime = now; return; }
+        lastClickTime = now;
+        addRegionPoint(e.lngLat);
+    }
+});
+
+map.on('dblclick', (e) => {
+    if (drawingRegion) {
+        e.preventDefault();
+        if (regionPoints.length >= 3) finishDrawing();
+    }
+});
+
+map.on('mousemove', (e) => {
+    if (drawingRegion && regionPoints.length > 0) updatePreview(e.lngLat);
+});
+
+// ═══════════════════════════════════════
+//  PUNTOS
+// ═══════════════════════════════════════
+
+function toggleAddMode() {
+    if (drawingRegion) cancelDrawing();
+    addMode = !addMode;
+    const btn = document.getElementById('btn-add');
+    if (addMode) {
+        btn.textContent = '✕ Cancelar';
+        btn.classList.add('active');
+        map.getContainer().classList.add('cursor-add');
+    } else {
+        btn.textContent = '+ Agregar lugar';
+        btn.classList.remove('active');
+        map.getContainer().classList.remove('cursor-add');
+        closeForm();
+    }
+}
+
+function showTagForm(lngLat) {
+    closeForm();
+    const html = `
+        <div class="tag-form">
+            <h3>Nuevo lugar histórico</h3>
+            <input  id="tf-name"   type="text" placeholder="Nombre histórico  (ej: Monte Sión)" />
+            <input  id="tf-modern" type="text" placeholder="Nombre moderno  (opcional)" />
+            <select id="tf-type">
+                <option value="ciudad">Ciudad</option>
+                <option value="cordillera">Cadena Montañosa</option>
+                <option value="monte">Monte / Montaña</option>
+                <option value="planicie">Planicie / Llanura</option>
+                <option value="region">Región</option>
+                <option value="agua">Cuerpo de Agua</option>
+                <option value="pueblo">Pueblo / Aldea</option>
+                <option value="otro">Otro</option>
+            </select>
+            <textarea id="tf-note" placeholder="Nota histórica  (opcional)"></textarea>
+            <div class="btn-row">
+                <button class="btn-save"   onclick="saveTag(${lngLat.lng}, ${lngLat.lat})">Guardar</button>
+                <button class="btn-cancel" onclick="closeForm()">Cancelar</button>
+            </div>
+        </div>`;
+    activePopup = new maplibregl.Popup({ closeButton: false, maxWidth: '270px', offset: 12 })
+        .setLngLat(lngLat).setHTML(html).addTo(map);
+    setTimeout(() => document.getElementById('tf-name')?.focus(), 80);
+}
+
+function closeForm() {
+    if (activePopup) { activePopup.remove(); activePopup = null; }
+}
+
+function saveTag(lng, lat) {
+    const name = document.getElementById('tf-name')?.value.trim();
+    if (!name) { alert('Por favor ingresa un nombre.'); return; }
+    const tag = {
+        id:     Date.now(),
+        name,
+        modern: document.getElementById('tf-modern')?.value.trim() || '',
+        type:   document.getElementById('tf-type')?.value || 'otro',
+        note:   document.getElementById('tf-note')?.value.trim() || '',
+        lng, lat
+    };
+    tags.push(tag);
+    saveData();
+    addMarker(tag);
+    renderPanel();
+    closeForm();
+    toggleAddMode();
+}
+
+function addMarker(tag) {
+    const color = COLORS[tag.type] || COLORS.otro;
+    const icon  = TYPE_ICONS[tag.type] || 'place';
+    const el = document.createElement('div');
+    el.className = 'marker-wrapper';
+    el.innerHTML = `
+        <div class="marker-label" style="color:${color};border-color:${color}">
+          <span class="material-icons-round" style="font-size:10px;vertical-align:-1px;line-height:1;margin-right:3px">${icon}</span>${escHtml(tag.name)}</div>
+        <div class="marker-line"  style="background:${color}"></div>
+        <div class="marker-dot"   style="background:${color}"></div>`;
+    const modernLine = tag.modern ? `<div class="pop-modern">Nombre moderno: ${escHtml(tag.modern)}</div>` : '';
+    const noteLine   = tag.note   ? `<div class="pop-note">${escHtml(tag.note)}</div>` : '';
+    const popup = new maplibregl.Popup({ offset: [0, -8], closeButton: true, maxWidth: '230px' })
+        .setHTML(`<div class="pop-wrap">
+            <div class="pop-name">${escHtml(tag.name)}</div>
+            ${modernLine}
+            <span class="pop-type">${TYPE_LABELS[tag.type] || tag.type}</span>
+            ${noteLine}
+            <div style="margin-top:8px;display:flex;gap:6px">
+                <button id="pop-edit-tag-${tag.id}"   class="btn-save"   style="font-size:0.72rem;padding:4px 10px">Editar</button>
+                <button id="pop-delete-tag-${tag.id}" class="btn-cancel" style="font-size:0.72rem;padding:4px 8px">Eliminar</button>
+            </div>
+        </div>`);
+    popup.on('open', () => {
+        document.getElementById(`pop-edit-tag-${tag.id}`)  ?.addEventListener('click', () => showTagEditForm(tag.id));
+        document.getElementById(`pop-delete-tag-${tag.id}`)?.addEventListener('click', () => deleteTag(tag.id));
+    });
+    const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([tag.lng, tag.lat]).setPopup(popup).addTo(map);
+    markers[tag.id] = marker;
+}
+
+function showTagEditForm(id) {
+    const tag = tags.find(t => t.id === id);
+    if (!tag) return;
+    closeForm();
+    const typeOptions = Object.keys(TYPE_LABELS).map(k =>
+        `<option value="${k}" ${k === tag.type ? 'selected' : ''}>${TYPE_LABELS[k]}</option>`
+    ).join('');
+    const html = `
+        <div class="tag-form">
+            <h3>Editar lugar</h3>
+            <input  id="tf-name"   type="text" value="${escHtml(tag.name)}"   placeholder="Nombre histórico" />
+            <input  id="tf-modern" type="text" value="${escHtml(tag.modern)}" placeholder="Nombre moderno (opcional)" />
+            <select id="tf-type">${typeOptions}</select>
+            <textarea id="tf-note" placeholder="Nota histórica (opcional)">${escHtml(tag.note)}</textarea>
+            <div class="btn-row">
+                <button class="btn-save" onclick="updateTag(${id})">Guardar cambios</button>
+                <button class="btn-cancel" onclick="closeForm()">Cancelar</button>
+            </div>
+        </div>`;
+    activePopup = new maplibregl.Popup({ closeButton: false, maxWidth: '270px', offset: [0, -8] })
+        .setLngLat([tag.lng, tag.lat]).setHTML(html).addTo(map);
+    setTimeout(() => document.getElementById('tf-name')?.focus(), 80);
+}
+
+function updateTag(id) {
+    const name = document.getElementById('tf-name')?.value.trim();
+    if (!name) { alert('Por favor ingresa un nombre.'); return; }
+    const idx = tags.findIndex(t => t.id === id);
+    if (idx === -1) return;
+    tags[idx] = {
+        ...tags[idx],
+        name,
+        modern: document.getElementById('tf-modern')?.value.trim() || '',
+        type:   document.getElementById('tf-type')?.value || 'otro',
+        note:   document.getElementById('tf-note')?.value.trim() || '',
+    };
+    saveData();
+    markers[id]?.remove();
+    delete markers[id];
+    addMarker(tags[idx]);
+    renderPanel();
+    closeForm();
+}
+
+function deleteTag(id) {
+    if (!confirm('¿Eliminar este lugar?')) return;
+    markers[id]?.remove();
+    delete markers[id];
+    tags = tags.filter(t => t.id !== id);
+    saveData();
+    renderPanel();
+}
+
+function flyToTag(id) {
+    const tag = tags.find(t => t.id === id);
+    if (!tag) return;
+    map.flyTo({ center: [tag.lng, tag.lat], zoom: 13, pitch: 52, duration: 1400 });
+    setTimeout(() => markers[id]?.togglePopup(), 1500);
+}
+
+// ═══════════════════════════════════════
+//  REGIONES (POLÍGONOS)
+// ═══════════════════════════════════════
+
+function toggleDrawRegion() {
+    if (addMode) toggleAddMode();
+    drawingRegion = !drawingRegion;
+    const btn = document.getElementById('btn-region');
+    if (drawingRegion) {
+        regionPoints = [];
+        btn.textContent = '✕ Cancelar región';
+        btn.classList.add('active');
+        map.getContainer().classList.add('cursor-draw');
+        document.getElementById('drawing-hint').style.display = 'block';
+        updateHint();
+    } else {
+        cancelDrawing();
+    }
+}
+
+function enterPanMode() {
+    const c = map.getContainer();
+    c.classList.remove('cursor-draw');
+    c.classList.add('cursor-pan');
+    document.getElementById('hint-pan-btn').textContent = '✏️ Agregar puntos';
+    document.getElementById('hint-pan-btn').style.color = '#9b59b6';
+}
+
+function exitPanMode() {
+    panMode = false;
+    const c = map.getContainer();
+    c.classList.remove('cursor-pan');
+    c.classList.add('cursor-draw');
+    document.getElementById('hint-pan-btn').textContent = '✋ Mover mapa';
+    document.getElementById('hint-pan-btn').style.color = '';
+}
+
+function togglePanMode() {
+    panMode = !panMode;
+    if (panMode) enterPanMode(); else exitPanMode();
+}
+
+function cancelDrawing() {
+    drawingRegion = false;
+    regionPoints  = [];
+    panMode   = false;
+    spaceHeld = false;
+    const btn = document.getElementById('btn-region');
+    btn.textContent = '◩ Dibujar región';
+    btn.classList.remove('active');
+    map.getContainer().classList.remove('cursor-draw');
+    document.getElementById('drawing-hint').style.display = 'none';
+    clearPreview();
+    closeForm();
+}
+
+function addRegionPoint(lngLat) {
+    regionPoints.push([lngLat.lng, lngLat.lat]);
+    updatePreview(lngLat);
+    updateHint();
+}
+
+function updatePreview(cursor) {
+    const pts = [...regionPoints, [cursor.lng, cursor.lat]];
+    const closed = pts.length >= 3 ? [...pts, pts[0]] : pts;
+    const features = [];
+    if (pts.length >= 3) {
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: [closed] }
+        });
+    } else if (pts.length >= 2) {
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: pts }
+        });
+    }
+    if (regionPoints.length > 0) {
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'MultiPoint', coordinates: regionPoints }
+        });
+    }
+    map.getSource('drawing-preview')?.setData({ type: 'FeatureCollection', features });
+}
+
+function clearPreview() {
+    map.getSource('drawing-preview')?.setData({ type: 'FeatureCollection', features: [] });
+}
+
+function updateHint() {
+    document.getElementById('hint-pts').textContent = regionPoints.length;
+}
+
+function finishDrawing() {
+    if (regionPoints.length < 3) return;
+    const c = centroid(regionPoints);
+    clearPreview();
+    drawingRegion = false;
+    map.getContainer().classList.remove('cursor-draw');
+    document.getElementById('drawing-hint').style.display = 'none';
+    document.getElementById('btn-region').textContent = '◩ Dibujar región';
+    document.getElementById('btn-region').classList.remove('active');
+    showRegionForm(c, [...regionPoints]);
+    regionPoints = [];
+}
+
+function showRegionForm(lngLat, points) {
+    closeForm();
+    // Auto-assign next unused color
+    const usedColors = new Set(regions.map(r => r.color));
+    pendingRegionColor = REGION_PALETTE.find(c => !usedColors.has(c)) || REGION_PALETTE[regions.length % REGION_PALETTE.length];
+
+    const swatches = REGION_PALETTE.map(c => {
+        const sel = c === pendingRegionColor ? 'selected' : '';
+        return `<div class="color-swatch ${sel}" data-color="${c}" style="background:${c}" onclick="selectRegionColor('${c}')"></div>`;
+    }).join('');
+
+    const html = `
+        <div class="tag-form region-form" id="region-form-el">
+            <h3>Nueva área</h3>
+            <input id="rf-name"   type="text" placeholder="Nombre  (ej: Galilea, Reino de David...)" />
+            <input id="rf-modern" type="text" placeholder="Nombre moderno  (opcional)" />
+            <input id="rf-color-value" type="hidden" value="${pendingRegionColor}" />
+            <div style="display:flex;gap:6px;margin-bottom:7px">
+                <label style="flex:1;padding:5px;background:#001530;border:1px solid #003060;border-radius:4px;cursor:pointer;font-size:0.78rem;display:flex;align-items:center;gap:5px">
+                    <input type="radio" name="rf-rtype" value="geografica" checked> 🌄 Geográfica
+                </label>
+                <label style="flex:1;padding:5px;background:#001530;border:1px solid #003060;border-radius:4px;cursor:pointer;font-size:0.78rem;display:flex;align-items:center;gap:5px">
+                    <input type="radio" name="rf-rtype" value="politica"> 👑 Política
+                </label>
+            </div>
+            <div class="color-preview-row">
+                <div class="color-preview-dot" id="rf-color-dot" style="background:${pendingRegionColor}"></div>
+                Color
+            </div>
+            <div class="color-palette" id="rf-palette">${swatches}</div>
+            <input id="rf-pattern-value" type="hidden" value="solid" />
+            <div style="margin-bottom:7px">
+                <div style="font-size:0.7rem;color:#888;margin-bottom:4px">Patrón de relleno</div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap">
+                    ${PATTERNS.map(p => `<button class="pattern-btn${p.key==='solid'?' pat-selected':''}" data-pat="${p.key}" onclick="selectPattern('${p.key}')">${p.icon} ${p.label}</button>`).join('')}
+                </div>
+            </div>
+            <textarea id="rf-note" placeholder="Nota histórica  (opcional)"></textarea>
+            <div class="btn-row">
+                <button class="btn-save btn-save-region" id="rf-save-btn" style="background:${pendingRegionColor}" onclick="saveRegion(${lngLat[0]}, ${lngLat[1]})">Guardar</button>
+                <button class="btn-cancel" onclick="closeForm()">Cancelar</button>
+            </div>
+        </div>`;
+    activePopup = new maplibregl.Popup({ closeButton: false, maxWidth: '280px', offset: 12 })
+        .setLngLat(lngLat).setHTML(html).addTo(map);
+    window._pendingRegionPoints = points;
+    setTimeout(() => document.getElementById('rf-name')?.focus(), 80);
+}
+
+function selectRegionColor(color) {
+    pendingRegionColor = color;
+    const hidden = document.getElementById('rf-color-value');
+    if (hidden) hidden.value = color;
+    document.querySelectorAll('.color-swatch').forEach(s => {
+        s.classList.toggle('selected', s.dataset.color === color);
+    });
+    const dot = document.getElementById('rf-color-dot');
+    const btn = document.getElementById('rf-save-btn');
+    if (dot) dot.style.background = color;
+    if (btn) btn.style.background = color;
+}
+
+function saveRegion(clng, clat) {
+    const name = document.getElementById('rf-name')?.value.trim();
+    if (!name) { alert('Por favor ingresa un nombre.'); return; }
+    const region = {
+        id:     Date.now(),
+        name,
+        modern:     document.getElementById('rf-modern')?.value.trim() || '',
+        color:      document.getElementById('rf-color-value')?.value || pendingRegionColor,
+        regionType: document.querySelector('input[name="rf-rtype"]:checked')?.value || 'geografica',
+        pattern:    document.getElementById('rf-pattern-value')?.value || 'solid',
+        note:       document.getElementById('rf-note')?.value.trim() || '',
+        points:     window._pendingRegionPoints || [],
+        clng, clat
+    };
+    window._pendingRegionPoints = null;
+    regions.push(region);
+    saveData();
+    updateRegionsLayer();
+    addRegionLabel(region);
+    renderPanel();
+    closeForm();
+}
+
+function addRegionLabel(region) {
+    const wrap  = document.createElement('div');
+    wrap.className = 'region-label-wrap';
+    const label = document.createElement('div');
+    label.className   = 'region-label';
+    label.style.color        = region.color;
+    label.style.borderColor  = region.color;
+    label.style.background   = hexToRgba(region.color, 0.12);
+    label.textContent = (region.regionType === 'politica' ? '♛ ' : '') + region.name;
+    label.style.fontStyle    = region.regionType === 'politica' ? 'normal' : 'italic';
+    label.style.borderStyle  = region.regionType === 'politica' ? 'dashed' : 'solid';
+    wrap.appendChild(label);
+    wrap.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const current = regions.find(r => r.id === region.id) || region;
+        showRegionPopup(current);
+    });
+    const marker = new maplibregl.Marker({ element: wrap, anchor: 'center' })
+        .setLngLat([region.clng, region.clat]).addTo(map);
+    regionMarkers[region.id] = marker;
+}
+
+function showRegionPopup(region) {
+    closeForm();
+    const modernLine = region.modern ? `<div class="pop-modern">Nombre moderno: ${escHtml(region.modern)}</div>` : '';
+    const noteLine   = region.note   ? `<div class="pop-note">${escHtml(region.note)}</div>` : '';
+    const html = `
+        <div class="pop-wrap">
+            <div class="pop-name" style="color:${region.color}">${escHtml(region.name)}</div>
+            ${modernLine}
+            <span class="pop-type">Región marcada</span>
+            ${noteLine}
+            <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">
+                <button id="pop-edit-info"  class="btn-save btn-save-region" style="background:${region.color};font-size:0.72rem;padding:4px 8px">Editar info</button>
+                <button id="pop-edit-shape" class="btn-save btn-save-region" style="background:${region.color};font-size:0.72rem;padding:4px 8px">Editar forma</button>
+                <button id="pop-delete-r"   class="btn-cancel"               style="font-size:0.72rem;padding:4px 8px">Eliminar</button>
+            </div>
+        </div>`;
+    activePopup = new maplibregl.Popup({ closeButton: true, maxWidth: '240px', offset: 12 })
+        .setLngLat([region.clng, region.clat]).setHTML(html).addTo(map);
+    setTimeout(() => {
+        document.getElementById('pop-edit-info') ?.addEventListener('click', () => showRegionEditForm(region.id));
+        document.getElementById('pop-edit-shape')?.addEventListener('click', () => { closeForm(); startVertexEdit(region.id); });
+        document.getElementById('pop-delete-r')  ?.addEventListener('click', () => deleteRegion(region.id));
+    }, 50);
+}
+
+function showRegionEditForm(id) {
+    const region = regions.find(r => r.id === id);
+    if (!region) return;
+    closeForm();
+    pendingRegionColor = region.color;
+
+    const swatches = REGION_PALETTE.map(c => {
+        const sel = c === region.color ? 'selected' : '';
+        return `<div class="color-swatch ${sel}" data-color="${c}" style="background:${c}" onclick="selectRegionColor('${c}')"></div>`;
+    }).join('');
+
+    const html = `
+        <div class="tag-form region-form">
+            <h3>Editar región</h3>
+            <input id="rf-name"        type="text"   value="${escHtml(region.name)}"   placeholder="Nombre histórico" />
+            <input id="rf-modern"      type="text"   value="${escHtml(region.modern)}" placeholder="Nombre moderno (opcional)" />
+            <input id="rf-color-value" type="hidden" value="${region.color}" />
+            <div class="color-preview-row">
+                <div class="color-preview-dot" id="rf-color-dot" style="background:${region.color}"></div>
+                Color de la región
+            </div>
+            <div class="color-palette">${swatches}</div>
+            <div style="margin-bottom:8px">
+                <div style="font-size:0.7rem;color:#888;margin-bottom:5px">Tipo de región</div>
+                <div style="display:flex;gap:6px">
+                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:0.78rem;color:#c39bd3">
+                        <input type="radio" name="rf-rtype" value="geografica" ${(region.regionType||'geografica')==='geografica'?'checked':''}> 🌄 Geográfica
+                    </label>
+                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:0.78rem;color:#C9A227">
+                        <input type="radio" name="rf-rtype" value="politica" ${region.regionType==='politica'?'checked':''}> 👑 Política
+                    </label>
+                </div>
+            </div>
+            <input id="rf-pattern-value" type="hidden" value="${region.pattern || 'solid'}" />
+            <div style="margin-bottom:7px">
+                <div style="font-size:0.7rem;color:#888;margin-bottom:4px">Patrón de relleno</div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap">
+                    ${PATTERNS.map(p => `<button class="pattern-btn${(region.pattern||'solid')===p.key?' pat-selected':''}" data-pat="${p.key}" onclick="selectPattern('${p.key}')">${p.icon} ${p.label}</button>`).join('')}
+                </div>
+            </div>
+            <textarea id="rf-note" placeholder="Nota histórica (opcional)">${escHtml(region.note)}</textarea>
+            <div class="btn-row">
+                <button class="btn-save btn-save-region" id="rf-save-btn" style="background:${region.color}" onclick="updateRegion(${id})">Guardar cambios</button>
+                <button class="btn-cancel" onclick="closeForm()">Cancelar</button>
+            </div>
+        </div>`;
+
+    activePopup = new maplibregl.Popup({ closeButton: false, maxWidth: '280px', offset: 12 })
+        .setLngLat([region.clng, region.clat]).setHTML(html).addTo(map);
+    setTimeout(() => document.getElementById('rf-name')?.focus(), 80);
+}
+
+function updateRegion(id) {
+    const name = document.getElementById('rf-name')?.value.trim();
+    if (!name) { alert('Por favor ingresa un nombre.'); return; }
+
+    const idx = regions.findIndex(r => r.id === id);
+    if (idx === -1) return;
+
+    regions[idx] = {
+        ...regions[idx],
+        name,
+        modern:     document.getElementById('rf-modern')?.value.trim() || '',
+        color:      document.getElementById('rf-color-value')?.value || pendingRegionColor,
+        regionType: document.querySelector('input[name="rf-rtype"]:checked')?.value || regions[idx].regionType || 'geografica',
+        note:       document.getElementById('rf-note')?.value.trim() || '',
+        pattern:    document.getElementById('rf-pattern-value')?.value || regions[idx].pattern || 'solid',
+    };
+
+    saveData();
+    updateRegionsLayer();
+    regionMarkers[id]?.remove();
+    delete regionMarkers[id];
+    addRegionLabel(regions[idx]);
+    renderPanel();
+    closeForm();
+}
+
+function deleteRegion(id) {
+    if (!confirm('¿Eliminar esta región?')) return;
+    closeForm();
+    regionMarkers[id]?.remove();
+    delete regionMarkers[id];
+    regions = regions.filter(r => r.id !== id);
+    saveData();
+    updateRegionsLayer();
+    renderPanel();
+}
+
+function flyToRegion(id) {
+    const r = regions.find(r => r.id === id);
+    if (!r) return;
+    map.flyTo({ center: [r.clng, r.clat], zoom: 10, pitch: 45, duration: 1400 });
+}
+
+// ── Edición de vértices ──
+let vertexEditId      = null;
+let vertexEditMarkers = [];
+let vertexMidMarkers  = [];
+let vertexEditBackup  = null;
+
+function startVertexEdit(id) {
+    closeForm();
+    cancelVertexEdit();
+    const region = regions.find(r => r.id === id);
+    if (!region) return;
+    vertexEditId     = id;
+    vertexEditBackup = JSON.parse(JSON.stringify(region.points));
+    buildVertexMarkers();
+    document.getElementById('vertex-bar').style.display = 'flex';
+}
+
+function buildVertexMarkers() {
+    clearVertexMarkers();
+    const region = regions.find(r => r.id === vertexEditId);
+    if (!region) return;
+
+    // Vértices arrastrables
+    region.points.forEach((pt, i) => {
+        const el = document.createElement('div');
+        el.className = 'vertex-handle';
+        const m = new maplibregl.Marker({ element: el, draggable: true })
+            .setLngLat(pt).addTo(map);
+        m.on('drag', () => {
+            const ll = m.getLngLat();
+            region.points[i] = [ll.lng, ll.lat];
+            const c = centroid(region.points);
+            region.clng = c[0]; region.clat = c[1];
+            updateRegionsLayer();
+            regionMarkers[vertexEditId]?.setLngLat(c);
+        });
+        m.on('dragend', () => buildMidMarkers());
+        vertexEditMarkers.push(m);
+    });
+
+    buildMidMarkers();
+}
+
+function buildMidMarkers() {
+    vertexMidMarkers.forEach(m => m.remove());
+    vertexMidMarkers = [];
+    const region = regions.find(r => r.id === vertexEditId);
+    if (!region) return;
+    const pts = region.points;
+
+    pts.forEach((pt, i) => {
+        const next = (i + 1) % pts.length;
+        const mid  = [(pt[0] + pts[next][0]) / 2, (pt[1] + pts[next][1]) / 2];
+        const insertAt = i + 1;
+
+        const el = document.createElement('div');
+        el.className = 'vertex-handle-mid';
+        el.title = 'Click para agregar punto aquí';
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            region.points.splice(insertAt, 0, [...mid]);
+            updateRegionsLayer();
+            buildVertexMarkers();
+        });
+        const m = new maplibregl.Marker({ element: el, anchor: 'center' })
+            .setLngLat(mid).addTo(map);
+        vertexMidMarkers.push(m);
+    });
+}
+
+function saveVertexEdit() {
+    saveData();
+    clearVertexMarkers();
+    document.getElementById('vertex-bar').style.display = 'none';
+    vertexEditId = null; vertexEditBackup = null;
+}
+
+function cancelVertexEdit() {
+    if (vertexEditId !== null && vertexEditBackup) {
+        const region = regions.find(r => r.id === vertexEditId);
+        if (region) {
+            region.points = vertexEditBackup;
+            const c = centroid(vertexEditBackup);
+            region.clng = c[0]; region.clat = c[1];
+            updateRegionsLayer();
+            regionMarkers[vertexEditId]?.setLngLat(c);
+        }
+    }
+    clearVertexMarkers();
+    document.getElementById('vertex-bar').style.display = 'none';
+    vertexEditId = null; vertexEditBackup = null;
+}
+
+function clearVertexMarkers() {
+    vertexEditMarkers.forEach(m => m.remove()); vertexEditMarkers = [];
+    vertexMidMarkers.forEach(m => m.remove());  vertexMidMarkers  = [];
+}
+
+function updateRegionsLayer() {
+    const src = map.getSource('saved-regions');
+    if (!src) return;
+    src.setData({
+        type: 'FeatureCollection',
+        features: regions.map(r => ({
+            type: 'Feature',
+            properties: { id: r.id, color: r.color, regionType: r.regionType || 'geografica', pattern: r.pattern || 'solid' },
+            geometry: { type: 'Polygon', coordinates: [[...r.points, r.points[0]]] }
+        }))
+    });
+}
+
+// ═══════════════════════════════════════
+//  PANEL
+// ═══════════════════════════════════════
+
+// ── Filter bar (top, horizontal) ──
+function renderFilterBar() {
+    const bar = document.getElementById('filter-bar');
+    const usedTypes   = [...new Set(tags.map(t => t.type))];
+    const hasRegions  = regions.length > 0;
+
+    if (tags.length === 0 && !hasRegions) { bar.innerHTML = ''; return; }
+
+    const showAll     = activeFilters.has('__all__');
+    const indActive   = (k) => !showAll && activeFilters.has(k);
+
+    const typeChips = Object.keys(TYPE_LABELS)
+        .filter(k => usedTypes.includes(k))
+        .map(k => {
+            const count  = tags.filter(t => t.type === k).length;
+            const color  = COLORS[k] || COLORS.otro;
+            const active = indActive(k) ? 'active' : '';
+            return `<span class="chip ${active}"
+                style="background:${color}22;color:${color};border-color:${color}"
+                onclick="toggleFilter('${k}')">
+                ${TYPE_LABELS[k]}<span class="chip-count">${count}</span>
+            </span>`;
+        }).join('');
+
+    const geoCount = regions.filter(r => (r.regionType || 'geografica') === 'geografica').length;
+    const polCount = regions.filter(r => r.regionType === 'politica').length;
+    const regionChips = (geoCount > 0 || polCount > 0) ? `
+        <span class="divider"></span>
+        ${geoCount > 0 ? `<span class="chip ${indActive('_geo') ? 'active' : ''}"
+            style="background:#9b59b622;color:#c39bd3;border-color:#9b59b6"
+            onclick="toggleFilter('_geo')">🌄 Reg. Geográficas<span class="chip-count">${geoCount}</span></span>` : ''}
+        ${polCount > 0 ? `<span class="chip ${indActive('_pol') ? 'active' : ''}"
+            style="background:#C9A22722;color:#C9A227;border-color:#C9A227"
+            onclick="toggleFilter('_pol')">👑 Territorios Políticos<span class="chip-count">${polCount}</span></span>` : ''}
+    ` : '';
+
+    const todoChip = `<span class="chip ${showAll ? 'active' : ''}"
+        style="background:#88888822;color:#aaa;border-color:#666"
+        onclick="toggleFilter('todos')">Todos</span>`;
+
+    bar.innerHTML = todoChip + (typeChips ? '<span class="divider"></span>' + typeChips : '') + regionChips;
+}
+
+function renderPanel() {
+    const total = tags.length + regions.length;
+    document.getElementById('total-count').textContent = total;
+
+    renderFilterBar();
+
+    const showAll         = activeFilters.has('__all__');
+    const hasPointFilters = showAll || [...activeFilters].some(f => f !== '_geo' && f !== '_pol' && f !== '__all__');
+    const showGeo         = showAll || activeFilters.has('_geo');
+    const showPol         = showAll || activeFilters.has('_pol');
+
+    // Guardar estado abierto/cerrado de los grupos
+    const openState = {};
+    document.querySelectorAll('#tag-list details[data-sec], #region-list details[data-sec]').forEach(d => {
+        openState[d.dataset.sec] = d.open;
+    });
+    const isOpen = (key) => key in openState ? openState[key] : true;
+
+    function tagItem(tag) {
+        const color = COLORS[tag.type] || COLORS.otro;
+        return `<div class="tag-item" onclick="flyToTag(${tag.id})">
+            <div class="tag-dot" style="background:${color};display:flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;flex-shrink:0">
+              <span class="material-icons-round" style="font-size:9px;color:#fff;line-height:1">${TYPE_ICONS[tag.type]||'place'}</span>
+            </div>
+            <div style="flex:1;min-width:0">
+                <div class="tag-name">${escHtml(tag.name)}</div>
+                ${tag.modern ? `<span class="tag-type">${escHtml(tag.modern)}</span>` : ''}
+            </div>
+            <span class="tag-del" onclick="event.stopPropagation();deleteTag(${tag.id})" title="Eliminar">✕</span>
+        </div>`;
+    }
+
+    // ── Lista de puntos agrupada por tipo ──
+    const tagList = document.getElementById('tag-list');
+    if (!hasPointFilters || tags.length === 0) {
+        tagList.innerHTML = tags.length === 0
+            ? '<div class="empty-msg">Sin lugares aún.<br>Usa <strong style="color:#C9A227">+ Agregar lugar</strong>.</div>'
+            : '';
+    } else {
+        const visibleTypes = showAll
+            ? Object.keys(TYPE_LABELS)
+            : Object.keys(TYPE_LABELS).filter(k => activeFilters.has(k));
+
+        const groups = visibleTypes
+            .map(type => ({ type, items: tags.filter(t => t.type === type).sort((a,b) => a.name.localeCompare(b.name)) }))
+            .filter(g => g.items.length > 0);
+
+        if (groups.length === 0) {
+            tagList.innerHTML = '<div class="empty-msg" style="padding:10px">Sin lugares de este tipo.</div>';
+        } else {
+            tagList.innerHTML = groups.map(g => {
+                const color = COLORS[g.type] || COLORS.otro;
+                const icon  = TYPE_ICONS[g.type] || 'place';
+                return `<details class="type-group" data-sec="${g.type}" ${isOpen(g.type)?'open':''}>
+                    <summary class="group-header">
+                        <span class="material-icons-round" style="font-size:11px;color:${color}">${icon}</span>
+                        <span style="color:${color}">${TYPE_LABELS[g.type]}</span>
+                        <span class="group-count">${g.items.length}</span>
+                    </summary>
+                    ${g.items.map(tagItem).join('')}
+                </details>`;
+            }).join('');
+        }
+    }
+
+    // ── Lista de regiones agrupada ──
+    const regionSection = document.getElementById('region-section');
+    const regionList    = document.getElementById('region-list');
+
+    const geoRegions = showGeo ? regions.filter(r => (r.regionType||'geografica') === 'geografica').sort((a,b)=>a.name.localeCompare(b.name)) : [];
+    const polRegions = showPol ? regions.filter(r => r.regionType === 'politica').sort((a,b)=>a.name.localeCompare(b.name)) : [];
+
+    function regionItem(r) {
+        return `<div class="region-item" onclick="flyToRegion(${r.id})">
+            <div class="region-swatch" style="background:${r.color}"></div>
+            <div style="flex:1;min-width:0">
+                <div class="tag-name">${escHtml(r.name)}</div>
+                ${r.modern ? `<span class="tag-type">${escHtml(r.modern)}</span>` : ''}
+            </div>
+            <span class="tag-del" onclick="event.stopPropagation();deleteRegion(${r.id})" title="Eliminar">✕</span>
+        </div>`;
+    }
+
+    if (geoRegions.length === 0 && polRegions.length === 0) {
+        regionSection.style.display = 'none';
+    } else {
+        regionSection.style.display = 'block';
+        let html = '';
+        if (geoRegions.length > 0) {
+            html += `<details class="type-group" data-sec="_geo" ${isOpen('_geo')?'open':''}>
+                <summary class="group-header">
+                    <span style="color:#c39bd3">🌄 Reg. Geográficas</span>
+                    <span class="group-count">${geoRegions.length}</span>
+                </summary>
+                ${geoRegions.map(regionItem).join('')}
+            </details>`;
+        }
+        if (polRegions.length > 0) {
+            html += `<details class="type-group" data-sec="_pol" ${isOpen('_pol')?'open':''}>
+                <summary class="group-header">
+                    <span style="color:#C9A227">👑 Territorios Políticos</span>
+                    <span class="group-count">${polRegions.length}</span>
+                </summary>
+                ${polRegions.map(regionItem).join('')}
+            </details>`;
+        }
+        regionList.innerHTML = html;
+    }
+}
+
+function toggleFilter(type) {
+    if (type === 'todos') {
+        if (activeFilters.has('__all__')) {
+            activeFilters.clear(); // apagar todo
+        } else {
+            activeFilters.clear();
+            activeFilters.add('__all__'); // prender todo
+        }
+    } else {
+        activeFilters.delete('__all__'); // salir del modo "todos"
+        if (activeFilters.has(type)) {
+            activeFilters.delete(type);
+        } else {
+            activeFilters.add(type);
+        }
+    }
+    renderPanel();
+    applyMapFilter();
+    scheduleOffscreen();
+}
+
+// ═══════════════════════════════════════
+//  OFF-SCREEN INDICATORS
+// ═══════════════════════════════════════
+
+function edgePosition(cx, cy, tx, ty, W, H, pad) {
+    const dx = tx - cx, dy = ty - cy;
+    const tx_ = dx > 0 ? (W - pad - cx) / dx : dx < 0 ? (pad - cx) / dx : Infinity;
+    const ty_ = dy > 0 ? (H - pad - cy) / dy : dy < 0 ? (pad - cy) / dy : Infinity;
+    const t   = Math.min(tx_, ty_);
+    let arrow;
+    if (tx_ < ty_) arrow = dx > 0 ? '←' : '→';
+    else           arrow = dy > 0 ? '↑' : '↓';
+    return { x: cx + dx * t, y: cy + dy * t, arrow };
+}
+
+let _osRaf = null;
+function scheduleOffscreen() {
+    if (_osRaf) cancelAnimationFrame(_osRaf);
+    _osRaf = requestAnimationFrame(updateOffscreenIndicators);
+}
+
+function updateOffscreenIndicators() {
+    const container = document.getElementById('offscreen-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const W  = map.getCanvas().clientWidth;
+    const H  = map.getCanvas().clientHeight;
+    const cx = W / 2, cy = H / 2;
+    const pad = 30;
+
+    const showPoints = activeFilters.has('__all__') ||
+        [...activeFilters].some(f => f !== '_geo' && f !== '_pol' && f !== '__all__');
+    if (!showPoints) return;
+
+    tags.forEach(tag => {
+        const markerEl = markers[tag.id]?.getElement();
+        if (!markerEl || markerEl.style.display === 'none') return;
+
+        const pt = map.project([tag.lng, tag.lat]);
+        if (pt.x >= 0 && pt.x <= W && pt.y >= 0 && pt.y <= H) return;
+
+        const { x, y, arrow } = edgePosition(cx, cy, pt.x, pt.y, W, H, pad);
+        const color = COLORS[tag.type] || COLORS.otro;
+        const icon  = TYPE_ICONS[tag.type] || 'place';
+        const name  = tag.name.length > 13 ? tag.name.slice(0, 12) + '…' : tag.name;
+
+        const el = document.createElement('div');
+        el.className = 'os-ind';
+        el.style.left       = x + 'px';
+        el.style.top        = y + 'px';
+        el.style.background = color;
+        el.innerHTML =
+            `<span class="os-ind-arr">${arrow}</span>` +
+            `<span class="material-icons-round os-ind-icon">${icon}</span>` +
+            `<span class="os-ind-name">${escHtml(name)}</span>`;
+        el.addEventListener('click', () => flyToTag(tag.id));
+        container.appendChild(el);
+    });
+}
+
+function applyMapFilter() {
+    const showAll       = activeFilters.has('__all__');
+    const showGeo       = showAll || activeFilters.has('_geo');
+    const showPol       = showAll || activeFilters.has('_pol');
+    const showAnyRegion = showGeo || showPol;
+
+    // Marcadores de puntos
+    Object.keys(markers).forEach(id => {
+        const tag = tags.find(t => String(t.id) === String(id));
+        if (!tag) return;
+        const show = showAll || activeFilters.has(tag.type);
+        markers[id].getElement().style.display = show ? '' : 'none';
+    });
+
+    // Capas de polígonos
+    // Etiquetas HTML de regiones
+    Object.keys(regionMarkers).forEach(id => {
+        const r = regions.find(r => String(r.id) === String(id));
+        if (!r) return;
+        const isGeo = (r.regionType || 'geografica') === 'geografica';
+        const show  = isGeo ? showGeo : showPol;
+        regionMarkers[id].getElement().style.display = show ? '' : 'none';
+    });
+
+    // Filtro de tipo de región para relleno (geo, pol, ambos, ninguno)
+    const rtFilter = (showGeo && showPol) ? null
+        : showGeo ? ['==', ['get', 'regionType'], 'geografica']
+        : showPol ? ['==', ['get', 'regionType'], 'politica']
+        : null; // si ninguno, ocultamos por visibility
+
+    if (map.getLayer('regions-fill')) {
+        map.setLayoutProperty('regions-fill', 'visibility', showAnyRegion ? 'visible' : 'none');
+        if (showAnyRegion) map.setFilter('regions-fill', rtFilter);
+    }
+    if (map.getLayer('regions-geo-line')) map.setLayoutProperty('regions-geo-line', 'visibility', showGeo ? 'visible' : 'none');
+    if (map.getLayer('regions-pol-line')) map.setLayoutProperty('regions-pol-line', 'visibility', showPol ? 'visible' : 'none');
+    ['dash', 'lines', 'hatch', 'dots'].forEach(type => {
+        if (!map.getLayer(`regions-pat-${type}`)) return;
+        map.setLayoutProperty(`regions-pat-${type}`, 'visibility', showAnyRegion ? 'visible' : 'none');
+        if (showAnyRegion) {
+            const patCond = ['==', ['get', 'pattern'], type];
+            map.setFilter(`regions-pat-${type}`, rtFilter ? ['all', patCond, rtFilter] : patCond);
+        }
+    });
+}
+
+// ═══════════════════════════════════════
+//  ESTILO / MAPA
+// ═══════════════════════════════════════
+
+function addTerrainAndSky() {
+    if (!map.getSource('terrain')) {
+        map.addSource('terrain', {
+            type: 'raster-dem',
+            url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${MAPTILER_KEY}`,
+            tileSize: 256
+        });
+    }
+    map.setTerrain({ source: 'terrain', exaggeration: 2.5 });
+    map.setSky({
+        'sky-color': '#1a5f8a', 'sky-horizon-blend': 0.5,
+        'horizon-color': '#f9d59b', 'horizon-fog-blend': 0.25,
+        'fog-color': '#c8d8e8', 'fog-ground-blend': 0.85
+    });
+}
+
+// ── Patrones de relleno ──
+function generatePatternCanvas(type) {
+    const s = 16;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = s;
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, s, s);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillStyle   = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth   = 1.5;
+    ctx.lineCap     = 'round';
+    if (type === 'dash') {
+        for (let y = 4; y < s; y += 8) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(s, y); ctx.stroke();
+        }
+    } else if (type === 'lines') {
+        for (let x = -s; x <= 2 * s; x += 8) {
+            ctx.beginPath(); ctx.moveTo(x, s); ctx.lineTo(x + s, 0); ctx.stroke();
+        }
+    } else if (type === 'hatch') {
+        for (let x = -s; x <= 2 * s; x += 8) {
+            ctx.beginPath(); ctx.moveTo(x, s); ctx.lineTo(x + s, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + s, s); ctx.stroke();
+        }
+    } else if (type === 'dots') {
+        [[4,4],[12,4],[4,12],[12,12],[8,8]]
+            .forEach(([x,y]) => { ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI*2); ctx.fill(); });
+    }
+    return cv;
+}
+
+function registerPatternImages() {
+    ['dash', 'lines', 'hatch', 'dots'].forEach(type => {
+        if (map.hasImage(`pat-${type}`)) return;
+        try {
+            const cv     = generatePatternCanvas(type);
+            const ctx    = cv.getContext('2d');
+            const raw    = ctx.getImageData(0, 0, cv.width, cv.height);
+            map.addImage(`pat-${type}`, {
+                width:  cv.width,
+                height: cv.height,
+                data:   new Uint8Array(raw.data.buffer)
+            });
+        } catch (_) { /* patrones no disponibles en este entorno */ }
+    });
+}
+
+function selectPattern(key) {
+    const input = document.getElementById('rf-pattern-value');
+    if (input) input.value = key;
+    document.querySelectorAll('.pattern-btn').forEach(b => {
+        b.classList.toggle('pat-selected', b.dataset.pat === key);
+    });
+}
+
+function addRegionSources() {
+    if (!map.getSource('saved-regions')) {
+        map.addSource('saved-regions', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+            id: 'regions-fill', type: 'fill', source: 'saved-regions',
+            paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.18 }
+        });
+        // Geográficas — línea sólida
+        map.addLayer({
+            id: 'regions-geo-line', type: 'line', source: 'saved-regions',
+            filter: ['==', ['get', 'regionType'], 'geografica'],
+            paint: { 'line-color': ['get', 'color'], 'line-width': 2, 'line-opacity': 0.85 }
+        });
+        // Territorios políticos — línea punteada
+        map.addLayer({
+            id: 'regions-pol-line', type: 'line', source: 'saved-regions',
+            filter: ['==', ['get', 'regionType'], 'politica'],
+            paint: { 'line-color': ['get', 'color'], 'line-width': 2.5, 'line-opacity': 0.9, 'line-dasharray': [5, 3] }
+        });
+        // Capas de patrones (una por tipo, imagen estática)
+        try {
+            registerPatternImages();
+            ['dash', 'lines', 'hatch', 'dots'].forEach(type => {
+                map.addLayer({
+                    id: `regions-pat-${type}`, type: 'fill', source: 'saved-regions',
+                    filter: ['==', ['get', 'pattern'], type],
+                    paint: { 'fill-pattern': `pat-${type}`, 'fill-opacity': 0.6 }
+                }, 'regions-geo-line');
+            });
+        } catch (_) { /* fill-pattern no disponible */ }
+    }
+    if (!map.getSource('drawing-preview')) {
+        map.addSource('drawing-preview', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+            id: 'preview-fill', type: 'fill', source: 'drawing-preview',
+            filter: ['==', '$type', 'Polygon'],
+            paint: { 'fill-color': '#9b59b6', 'fill-opacity': 0.15 }
+        });
+        map.addLayer({
+            id: 'preview-line', type: 'line', source: 'drawing-preview',
+            filter: ['any', ['==', '$type', 'Polygon'], ['==', '$type', 'LineString']],
+            paint: { 'line-color': '#9b59b6', 'line-width': 2, 'line-dasharray': [3, 2] }
+        });
+        map.addLayer({
+            id: 'preview-points', type: 'circle', source: 'drawing-preview',
+            filter: ['==', '$type', 'Point'],
+            paint: { 'circle-radius': 4, 'circle-color': '#9b59b6', 'circle-stroke-width': 1.5, 'circle-stroke-color': '#fff' }
+        });
+    }
+}
+
+function toggleStyle() {
+    styleIndex = (styleIndex + 1) % STYLES.length;
+    const s = STYLES[styleIndex];
+    document.querySelector('.btn-vista').textContent = s.label;
+    map.setStyle(s.url);
+    map.once('styledata', () => {
+        addTerrainAndSky();
+        if (s.key !== 'satellite' && !map.getLayer('hillshade-layer')) {
+            map.addLayer({
+                id: 'hillshade-layer', type: 'hillshade', source: 'terrain',
+                paint: { 'hillshade-exaggeration': 0.5, 'hillshade-shadow-color': '#3a2a10', 'hillshade-highlight-color': '#fffbe8', 'hillshade-accent-color': '#c8a870' }
+            }, map.getStyle().layers.find(l => l.type === 'symbol')?.id);
+        }
+        registerPatternImages();
+        addRegionSources();
+        updateRegionsLayer();
+        if (roadsHidden) applyRoadVisibility();
+        hideMapLabels();
+        // Re-añadir marcadores de puntos
+        Object.keys(markers).forEach(id => markers[id].remove());
+        markers = {};
+        tags.forEach(tag => addMarker(tag));
+        // Re-añadir etiquetas de regiones
+        Object.keys(regionMarkers).forEach(id => regionMarkers[id].remove());
+        regionMarkers = {};
+        regions.forEach(r => addRegionLabel(r));
+        applyMapFilter();
+        scheduleOffscreen();
+    });
+}
+
+const ROAD_PATTERNS = ['road', 'highway', 'motorway', 'railway', 'transit',
+                       'aeroway', 'path', 'track', 'bridge', 'tunnel', 'ferry',
+                       'border', 'boundary', 'admin', 'country', 'state'];
+
+function applyRoadVisibility() {
+    if (STYLES[styleIndex].key === 'satellite') return;
+    map.getStyle().layers.forEach(layer => {
+        const id = layer.id.toLowerCase();
+        const isRoad = ROAD_PATTERNS.some(p => id.includes(p));
+        if (isRoad)
+            map.setLayoutProperty(layer.id, 'visibility', 'none');
+    });
+}
+
+function hideMapLabels() {
+    map.getStyle().layers.forEach(layer => {
+        if (layer.id.startsWith('saved-') || layer.id.startsWith('regions-')) return;
+        if (layer.type === 'symbol' && layer.layout?.['text-field'])
+            map.setLayoutProperty(layer.id, 'visibility', 'none');
+    });
+}
+
+function togglePitch() {
+    is3D = !is3D;
+    map.easeTo({ pitch: is3D ? 52 : 0, duration: 800 });
+}
+
+// ═══════════════════════════════════════
+//  DATOS — guardar / cargar / exportar
+// ═══════════════════════════════════════
+
+function saveData() {
+    localStorage.setItem('historicData', JSON.stringify({ tags, regions }));
+}
+
+const EMBEDDED_DATA = {"tags":[{"id":1789842700374,"name":"Mar de Arabá","modern":"Mar Muerto","type":"agua","note":"","lng":35.484466552734375,"lat":31.592573630393332},{"id":1789842763242,"name":"Río Jordan","modern":"","type":"agua","note":"","lng":35.54360389709473,"lat":31.941310448407464},{"id":1789842918672,"name":"Mar de Kinnéret","modern":"Mar de Galilea","type":"agua","note":"","lng":35.59776306152344,"lat":32.809784578989934},{"id":1789843725090,"name":"Jerusalén","modern":"","type":"ciudad","note":"","lng":35.22491455078125,"lat":31.77487761850739},{"id":1789844145216,"name":"Áscalon","modern":"Ashkelon","type":"ciudad","note":"","lng":34.57414627075195,"lat":31.676904506665352},{"id":1789845532604,"name":"Hebrón","modern":"","type":"ciudad","note":"","lng":35.086212158203125,"lat":31.516508072331263},{"id":1789846024079,"name":"Nazareth","modern":"","type":"ciudad","note":"","lng":35.299072265625,"lat":32.687931474529464},{"id":1789856878892,"name":"Jericó","modern":"","type":"ciudad","note":"","lng":35.44841766357422,"lat":31.856272594739295},{"id":1789856914234,"name":"Caesarea","modern":"","type":"ciudad","note":"","lng":34.90922927856445,"lat":32.501365146675624},{"id":1789857230832,"name":"Samaria","modern":"Región de Sebastia","type":"ciudad","note":"","lng":35.18869400024414,"lat":32.27378066442219},{"id":1789857495532,"name":"Damasco","modern":"","type":"ciudad","note":"Ubicado en Siria","lng":36.2823486328125,"lat":33.51391942394942},{"id":1789858007401,"name":"Lago Semeconites","modern":"Valle de Jule","type":"agua","note":"","lng":35.61269760131836,"lat":33.12993251037369},{"id":1789865370964,"name":"El Gran Mar","modern":"Mar Mediterraneo","type":"agua","note":"","lng":34.41192626953125,"lat":32.229066296272975},{"id":1789866744570,"name":"Babilonia","modern":"Al Hilla","type":"ciudad","note":"","lng":44.411888122558594,"lat":32.49933826628565},{"id":1789866792826,"name":"Ninive","modern":"Mosul","type":"ciudad","note":"","lng":43.1103515625,"lat":36.31955125946119},{"id":1789866899826,"name":"Ur","modern":"","type":"ciudad","note":"","lng":46.307029724121094,"lat":31.044845299353724},{"id":1789866995766,"name":"Sidon","modern":"","type":"ciudad","note":"","lng":35.3759765625,"lat":33.56313971244444},{"id":1789867245094,"name":"Aco","modern":"","type":"ciudad","note":"","lng":35.07179260253906,"lat":32.92513113307652},{"id":1789868263575,"name":"Belén","modern":"","type":"ciudad","note":"","lng":35.19753456115723,"lat":31.709147777344768},{"id":1789868406814,"name":"Monte Sinaí","modern":"","type":"monte","note":"","lng":33.97453308105469,"lat":28.54713206234115},{"id":1789868473286,"name":"Monte Sión","modern":"","type":"monte","note":"","lng":35.2291202545166,"lat":31.771484604756893},{"id":1789868561843,"name":"Monte Tabor","modern":"","type":"monte","note":"","lng":35.38799285888672,"lat":32.68648671853771},{"id":1789923406365,"name":"Gaza","modern":"","type":"ciudad","note":"","lng":34.459991455078125,"lat":31.515337348706993},{"id":1789926414488,"name":"Joppa","modern":"","type":"ciudad","note":"","lng":34.77928161621094,"lat":32.06599222860686},{"id":1789927995821,"name":"Rabá","modern":"Amman, Jordania","type":"ciudad","note":"","lng":35.90812683105469,"lat":31.964396275519135},{"id":1789928689447,"name":"Monte Gerizim","modern":"","type":"monte","note":"","lng":35.269718170166016,"lat":32.19660556214336},{"id":1789928733943,"name":"Monte Carmelo","modern":"","type":"monte","note":"","lng":35.060977935791016,"lat":32.71176657296239}],"regions":[{"id":1789845448213,"name":"Costa Mediterranea","modern":"","color":"#1a8fc1","note":"","points":[[35.08655548095703,33.08550099414926],[35.141143798828125,33.07687091076717],[35.153160095214844,32.93291161802124],[35.119171142578125,32.91417966179351],[35.15281677246094,32.8686300689878],[35.07041931152344,32.76735703882201],[35.02819061279297,32.78352229759024],[35.00724792480469,32.74887886218821],[34.965362548828125,32.63995308352165],[34.94270324707031,32.528434096888276],[35.013084411621094,32.50541877041155],[35.003814697265625,32.288293580436644],[34.92897033691406,32.03660211743653],[34.90562438964844,31.86239619453363],[34.72023010253906,31.45795392876589],[34.61585998535156,31.313168287590173],[34.55955505371094,31.215150439316503],[34.47853088378906,31.132901401103325],[34.270477294921875,31.219261015606676],[34.237518310546875,31.3037817668869],[34.178466796875,31.363018491291186],[34.36042785644531,31.531140879895105],[34.575347900390625,31.829732296454807],[34.701690673828125,32.10933267766437],[34.80812072753906,32.5178680435577],[34.88502502441406,32.77515136946222],[34.94476318359375,32.90437982831811],[35.00862121582031,32.90495631913751],[35.055999755859375,33.04781007347208],[35.066986083984375,33.06565053653404]],"clng":34.832862854003906,"clat":32.291006888353486},{"id":1789846005183,"name":"Valle del Jordán","modern":"","color":"#16a085","note":"","points":[[35.2056884765625,30.878654895778297],[35.465240478515625,30.837393776037388],[35.473480224609375,30.954057859276134],[35.539398193359375,31.18108450480416],[35.54901123046875,31.311408386201634],[35.575103759765625,31.46146821080106],[35.544891357421875,31.57151553151978],[35.59295654296875,31.70830806077599],[35.63690185546875,31.865895211796342],[35.586090087890625,31.947501223670642],[35.65338134765625,32.05231681645637],[35.605316162109375,32.18026188320705],[35.61492919921875,32.24997445586331],[35.61767578125,32.49238861531073],[35.608062744140625,32.602361666817515],[35.627288818359375,32.73992711707743],[35.665740966796875,32.87382044499353],[35.6231689453125,32.978716146003336],[35.652008056640625,33.12260070156984],[35.660247802734375,33.21686115884748],[35.57647705078125,33.215712251730736],[35.580596923828125,33.09269208341614],[35.542144775390625,32.96834738864797],[35.540771484375,32.91648534731439],[35.509185791015625,32.819594869239765],[35.572357177734375,32.7272198702193],[35.547637939453125,32.63359256890699],[35.52978515625,32.45299712004733],[35.536651611328125,32.333558948641084],[35.55072784423828,32.22877587128845],[35.534934997558594,32.18084304210396],[35.514678955078125,32.113985463263816],[35.4254150390625,31.930311689733088],[35.454254150390625,31.798807599289702],[35.467987060546875,31.734007243746674],[35.4034423828125,31.60894886169568],[35.385589599609375,31.45443951485325],[35.343017578125,31.34660016487163],[35.36224365234375,31.255074185421932],[35.369110107421875,31.165809587861958],[35.281219482421875,30.9246106500527]],"clng":35.524995385146724,"clat":32.07631538997938},{"id":1789846227033,"name":"Cordillera Central","modern":"","color":"#ff6b35","note":"","points":[[35.08758544921875,32.784965481461185],[35.2166748046875,32.63243606312156],[35.5352783203125,32.560703522325156],[35.5242919921875,32.35676318267811],[35.5462646484375,32.22674287041066],[35.51055908203125,32.11282228909441],[35.42266845703125,31.931185811406294],[35.46112060546875,31.74218276211799],[35.386962890625,31.615965936476073],[35.37322998046875,31.45443951485325],[35.3265380859375,31.330178972184655],[35.3594970703125,31.15875879532973],[35.2716064453125,30.92814479412135],[35.20294189453125,30.88808351560904],[34.484710693359375,31.130550379240574],[34.56230163574219,31.213388709053987],[34.61860656738281,31.309061799866214],[34.72434997558594,31.455611000809995],[34.80314254760742,31.638767775839142],[34.90785598754883,31.860355039794527],[34.93549346923828,32.0364565983587],[34.96879577636719,32.16573170534818],[35.00965118408203,32.29003497429686],[35.01720428466797,32.410690015207734],[35.015830993652344,32.508893159600404],[34.94699478149414,32.53089450628447],[34.96673583984375,32.61392993783565],[35.02716064453125,32.771109949890445],[35.07110595703125,32.74570253945518]],"clng":35.113281381541285,"clat":31.94498453800246},{"id":1789856495320,"name":"Montañas de Transjordania","modern":"","color":"#9b59b6","note":"","points":[[35.484466552734375,30.839752032520252],[35.435028076171875,30.7040582309195],[35.457000732421875,30.597729748412036],[35.349884033203125,30.270928367219014],[35.19195556640625,30.028677532904197],[35.5242919921875,29.937085278663105],[35.5902099609375,30.16650098076606],[35.874481201171875,30.700515832683948],[35.9033203125,30.90811625106066],[35.99945068359375,31.058816234869866],[35.95001220703125,31.442723849469118],[35.973358154296875,31.610118410891687],[36.01318359375,31.723494802828597],[36.1175537109375,31.833232553025212],[36.17523193359375,32.23603621746476],[35.9857177734375,32.447202799649375],[35.852508544921875,32.85305711806933],[35.662994384765625,32.74685757900694],[35.6341552734375,32.72375394304274],[35.621795654296875,32.59310597426537],[35.628662109375,32.50281289041497],[35.62591552734375,32.27203895845447],[35.61767578125,32.187235545143864],[35.665740966796875,32.04998888314202],[35.599822998046875,31.947501223670642],[35.652008056640625,31.867061521367802],[35.55999755859375,31.568005385823255],[35.584716796875,31.45912537076441],[35.5462646484375,31.195182241158818],[35.478973388671875,30.94345790906287]],"clng":35.69187927246094,"clat":31.51380578889117},{"id":1789856628326,"name":"Desierto del Este","modern":"","color":"#e91e8c","note":"","points":[[35.94451904296875,32.7272198702193],[36.002197265625,32.46342595776103],[36.19720458984375,32.23371296980231],[36.13677978515625,31.82856551476617],[36.0296630859375,31.716485846385325],[35.96649169921875,31.438037173124457],[36.0186767578125,31.09292610699383],[35.91705322265625,30.89986798527889],[35.9033203125,30.73711434162702],[35.60394287109375,30.147502278499246],[35.55450439453125,29.93113480986868],[37.18048095703125,29.695210649161055],[37.628173828125,31.793555207271424],[37.79571533203125,32.722598604044066],[36.79046630859375,32.70873336852159]],"clng":36.311279296875,"clat":31.4757393788883},{"id":1789927117980,"name":"Llanura de Sarón","modern":"","color":"#546e7a","regionType":"geografica","pattern":"dash","note":"","points":[[35.00450134277344,32.500496489244824],[34.90562438964844,32.53349957219423],[34.81224060058594,32.18491105051798],[34.76898193359375,32.07850198496867],[34.84794616699219,32.05580860538704],[34.92210388183594,32.01855598828661],[34.92759704589844,32.04416879077792],[34.99969482421875,32.292937223074375],[35.003814697265625,32.45705292262463]],"clng":34.9102783203125,"clat":32.24065918078625},{"id":1789927172334,"name":"Llanura de Filisteos","modern":"","color":"#546e7a","regionType":"geografica","pattern":"dash","note":"","points":[[34.76829528808594,32.06861069132685],[34.839019775390625,32.051152857201714],[34.91832733154297,32.01302501121464],[34.90081787109375,31.860938231474435],[34.71508026123047,31.451803617879165],[34.44282531738281,31.529385064020943],[34.5574951171875,31.67617406501772],[34.6563720703125,31.829148907454098],[34.71748352050781,31.954492656522532]],"clng":34.723968505859375,"clat":31.82608123356801},{"id":1789929107914,"name":"Samaria","modern":"","color":"#16a085","regionType":"politica","pattern":"dots","note":"","points":[[34.90150451660156,32.53509151972369],[34.995574951171875,32.514973017607986],[35.04020690917969,32.72144325007592],[35.09376525878906,32.71046664083002],[35.11505126953125,32.669436832605314],[35.16242980957031,32.63417081619417],[35.22697448730469,32.61277317797456],[35.404815673828125,32.57632759478929],[35.430908203125,32.431266497569624],[35.4693603515625,32.3872097063239],[35.517425537109375,32.35676318267811],[35.54008483886719,32.22441938515301],[35.50952911376953,32.115294016488946],[35.50575256347656,31.913701799048567],[35.277099609375,31.931768554571278],[35.15144348144531,31.97721113810573],[34.98802185058594,32.00050630418923],[34.904937744140625,32.034855873238726],[34.771728515625,32.081410985325164],[34.814300537109375,32.18026188320705],[34.86167907714844,32.34980253736093],[34.888458251953125,32.45415593941475],[34.89738464355469,32.49586350791503]],"clng":35.15080161716627,"clat":32.343877137408306},{"id":1789929785004,"name":"Galilea","modern":"","color":"#9b59b6","regionType":"politica","pattern":"hatch","note":"","points":[[35.10612487792969,32.71104439078296],[35.13084411621094,32.67406085209231],[35.21873474121094,32.626075014116225],[35.26542663574219,32.608724400785405],[35.528411865234375,32.56301837144534],[35.584716796875,32.70122213274401],[35.550384521484375,32.729530413484696],[35.55656433105469,32.74743509316713],[35.53184509277344,32.7907379828099],[35.50506591796875,32.82767311846155],[35.53253173828125,32.86401614635635],[35.569610595703125,32.88708335868024],[35.61698913574219,32.90610928951675],[35.61424255371094,32.99599470276581],[35.61012268066406,33.076007855857256],[35.59501647949219,33.09614359735856],[35.35743713378906,33.11282400421533],[35.19744873046875,32.83690450361482],[35.14251708984375,32.76418137510082]],"clng":35.43231763337788,"clat":32.81677824228186},{"id":1789930147382,"name":"Siro-Fenicia","modern":"","color":"#C9A227","regionType":"politica","pattern":"lines","note":"","points":[[36.243896484375,33.33855971273252],[35.650634765625,33.34773762160762],[35.61115264892578,33.256202119547524],[35.61664581298828,33.16457061728549],[35.591583251953125,33.15479859453161],[35.595703125,33.101033010131246],[35.35606384277344,33.11512450149684],[35.23418426513672,32.90466807419695],[35.10234832763672,32.714510811924114],[35.06629943847656,32.718843648917],[35.0383186340332,32.725342509723106],[34.9943733215332,32.51685479508241],[34.9610710144043,32.52553941132666],[34.94150161743164,32.52988140469415],[34.89789962768555,32.538854192626104],[34.913177490234375,32.6103150136542],[34.95643615722656,32.83474098382776],[35.04072189331055,32.82060469056968],[35.07453918457031,32.87295540342649],[35.08200645446777,32.917926370265064],[35.0669002532959,32.920448103972774],[35.0958251953125,33.03543472611641],[35.109901428222656,33.10771956075254],[35.146121978759766,33.12648232367043],[35.166378021240234,33.162271415783636],[35.18320083618164,33.16794746018074],[35.19736289978027,33.19574758275387],[35.206804275512695,33.20529959320852],[35.21221160888672,33.256058571585726],[35.1921272277832,33.27313912301348],[35.20843505859375,33.274000238828876],[35.22972106933594,33.31675830290706],[35.246028900146484,33.333109871687896],[35.257015228271484,33.397195620629006],[35.2880859375,33.45894275368764],[35.33503532409668,33.4929493689086],[35.35795211791992,33.51764054105411],[35.36705017089844,33.55655955316719],[35.500946044921875,33.906895551288684],[36.53778076171875,33.79740876757249],[36.539154052734375,33.31331547642762],[36.41143798828125,33.31675830290706]],"clng":35.32914366040911,"clat":33.11526538803978},{"id":1789931552865,"name":"Judea","modern":"","color":"#e91e8c","regionType":"politica","pattern":"lines","note":"","points":[[35.50403594970703,31.909330276648404],[35.515708923339844,31.84460747003591],[35.543861389160156,31.762618400791368],[35.496482849121094,31.769331983126335],[35.46043395996094,31.709184286588325],[35.419921875,31.622397790323646],[35.38215637207031,31.531140879895105],[35.39176940917969,31.450924969071437],[35.413055419921875,31.335457525223447],[35.34782409667969,31.237462847742805],[35.32379150390625,31.06940336686411],[35.26885986328125,30.93285678304376],[35.204315185546875,30.89986798527889],[34.786834716796875,31.036461753598545],[34.278717041015625,31.22806879151213],[34.21623229980469,31.311995023651505],[34.40986633300781,31.485478941169603],[34.534149169921875,31.640521531985186],[34.597320556640625,31.626490556770634],[34.665985107421875,31.76436981705642],[34.62272644042969,31.77487761850739],[34.70375061035156,31.920112989509065],[34.770355224609375,32.0732655510424],[34.976348876953125,31.996430077186673],[35.15281677246094,31.969638935531364],[35.28327941894531,31.921861418447264],[35.41511535644531,31.912536080050486]],"clng":35.06243387858073,"clat":31.582840505579707},{"id":1789932039541,"name":"Perea","modern":"","color":"#546e7a","regionType":"politica","pattern":"dots","note":"","points":[[35.594329833984375,31.467325054442867],[35.68359375,31.46849637920596],[35.738525390625,31.490748764752368],[35.923919677734375,31.79122071500838],[35.74127197265625,32.36952297435151],[35.52703857421875,32.370682866114265],[35.550384521484375,32.23022798693012],[35.514678955078125,32.11282228909441],[35.517425537109375,31.91719886741916],[35.544891357421875,31.76787255014206],[35.57647705078125,31.76436981705642],[35.595703125,31.750357558882385],[35.577850341796875,31.63935236489621],[35.5572509765625,31.569175449070897],[35.55999755859375,31.5012875211967],[35.575103759765625,31.482551133122513]],"clng":35.61115264892578,"clat":31.793325768230385},{"id":1789932179513,"name":"Decápolis","modern":"","color":"#ff6b35","regionType":"politica","pattern":"dash","note":"","points":[[35.4144287109375,32.56880523294626],[35.432281494140625,32.434453983358424],[35.514678955078125,32.36488325846307],[35.7440185546875,32.3764821016577],[35.93902587890625,31.794722431293366],[36.2713623046875,31.79122071500838],[36.18621826171875,32.644000448276756],[36.00700378417969,32.73906077143313],[35.74607849121094,32.74368118420625],[35.6451416015625,32.798818855292],[35.63690185546875,32.74425871895697],[35.595703125,32.69602167606439],[35.533905029296875,32.55375861664005],[35.5352783203125,32.55375861664005],[35.470733642578125,32.561860954350664]],"clng":35.711517333984375,"clat":32.49105250430583}]};
+
+function loadData() {
+    fetch('tags.json')
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(applyData)
+        .catch(() => {
+            const raw = localStorage.getItem('historicData') || localStorage.getItem('historicTags');
+            if (raw) {
+                try {
+                    const d = JSON.parse(raw);
+                    applyData(d);
+                    return;
+                } catch { /* fall through */ }
+            }
+            applyData(EMBEDDED_DATA);
+        });
+}
+
+function applyData(d) {
+    if (Array.isArray(d)) {
+        tags = d; regions = [];
+    } else {
+        tags    = d.tags    || [];
+        regions = d.regions || [];
+    }
+    tags.forEach(tag => addMarker(tag));
+    regions.forEach(r => addRegionLabel(r));
+    updateRegionsLayer();
+    renderPanel();
+    applyMapFilter();
+    scheduleOffscreen();
+}
+
+function exportJSON() {
+    if (tags.length === 0 && regions.length === 0) { alert('Todavía no hay nada guardado.'); return; }
+    const blob = new Blob([JSON.stringify({ tags, regions }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'tags.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function importJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const d = JSON.parse(e.target.result);
+            Object.keys(markers).forEach(id => markers[id].remove()); markers = {};
+            Object.keys(regionMarkers).forEach(id => regionMarkers[id].remove()); regionMarkers = {};
+            applyData(d);
+            saveData();
+            alert(`Cargado: ${tags.length} lugares y ${regions.length} regiones.`);
+        } catch { alert('Archivo no válido.'); }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+// ═══════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════
+
+function centroid(pts) {
+    const n = pts.length;
+    return [pts.reduce((s, p) => s + p[0], 0) / n,
+            pts.reduce((s, p) => s + p[1], 0) / n];
+}
+
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
